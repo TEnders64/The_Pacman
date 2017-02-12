@@ -1,0 +1,424 @@
+<html>
+<head>
+	<title>Pacman</title>
+	<script src="https://code.jquery.com/jquery-1.11.3.min.js" type="text/javascript"></script>
+	<link rel="stylesheet" type="text/css" href="style.css">
+	<!-- Latest compiled and minified CSS -->
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" integrity="sha512-dTfge/zgoMYpP7QbHy4gWMEGsbsdZeCXz7irItjcC3sPUFtf0kuFbDz/ixG7ArTxmDjLXDmezHubeNikyKGVyQ==" crossorigin="anonymous">
+	<!-- Latest compiled and minified JavaScript -->
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js" integrity="sha512-K1qjQ+NcF2TYO/eI3M6v8EiNYZfA95pQumfvcVrTHtwQVDG+aHRqLi/ETn2uB+1JqwYqVG3LIvdm9lj6imS/pQ==" crossorigin="anonymous"></script>
+	<style>
+		.panel{
+			padding: 0px;
+		}
+	</style>
+	<script src="/socket.io/socket.io.js" type="text/javascript"></script>
+	<script>
+		$(document).ready(function(){
+			var socket = io.connect();
+			var name = prompt("Enter your Player Name: ");
+			var player_number;
+
+			//=============Sockets portion of code: Emit you are a new player, wait if there isn't a competitor, when there is a competitor, show their name and score and update it every 10 seconds====================//
+			socket.emit('new_user', {name: name});
+			socket.on('wait', function(player_no){
+				$('body').prepend('<h1 id="alert" style="text-align: center; color: red">PLEASE WAIT FOR COMPETITOR</h1>');
+				player_number = player_no.number;
+			});
+			socket.on('game_ready', function (data){
+				console.log(data.players);
+				$('#alert').text('GO!!!').css('color', 'green');
+				for (var i = 0; i < 2; i++){
+					$('#battle').append('<div class="row"><div class="col-md-10 col-md-offset-1"><div class="panel panel-warning"><div id="'+data.players[i].number+'" class="panel-heading">'+data.players[i].name+': '+data.players[i].score+' </div></div></div></div>');
+				}
+			});
+			socket.on('scores_sent', function (data){
+				$('#'+data.name).text(data.name+': '+data.score);
+			});
+			//map is an array, grid is 26 wide by 29 long... each grid square is 28 px...
+			//key 	{	
+			//		0: wall - illegal
+			// 		1: dots - legal
+			// 		2: blank - legal
+			// 		3: power - legal
+			//  	}
+			var map = 
+			[
+			[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+			[0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0],
+			[0,1,0,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1,0,0,0,0,1,0],
+			[0,3,0,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1,0,0,0,0,3,0],
+			[0,1,0,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1,0,0,0,0,1,0],
+			[0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+			[0,1,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,1,0],
+			[0,1,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,1,0],
+			[0,1,1,1,1,1,1,0,0,1,1,1,1,0,0,1,1,1,1,0,0,1,1,1,1,1,1,0],
+			[0,0,0,0,0,0,1,0,0,0,0,0,2,0,0,2,0,0,0,0,0,1,0,0,0,0,0,0],
+			[0,0,0,0,0,0,1,0,0,0,0,0,2,0,0,2,0,0,0,0,0,1,0,0,0,0,0,0],
+			[0,0,0,0,0,0,1,0,0,2,2,2,2,2,2,2,2,2,2,0,0,1,0,0,0,0,0,0],
+			[0,0,0,0,0,0,1,0,0,2,0,0,0,0,0,0,0,0,2,0,0,1,0,0,0,0,0,0],
+			[0,0,0,0,0,0,1,0,0,2,0,0,0,0,0,0,0,0,2,0,0,1,0,0,0,0,0,0],
+			["pipe",2,2,2,2,2,1,2,2,2,0,0,0,0,0,0,0,0,2,2,2,1,2,2,2,2,2,"pipe"],
+			[0,0,0,0,0,0,1,0,0,2,0,0,0,0,0,0,0,0,2,0,0,1,0,0,0,0,0,0],
+			[0,0,0,0,0,0,1,0,0,2,0,0,0,0,0,0,0,0,2,0,0,1,0,0,0,0,0,0],
+			[0,0,0,0,0,0,1,0,0,2,2,2,2,2,2,2,2,2,2,0,0,1,0,0,0,0,0,0],
+			[0,0,0,0,0,0,1,0,0,2,0,0,0,0,0,0,0,0,2,0,0,1,0,0,0,0,0,0],
+			[0,0,0,0,0,0,1,0,0,2,0,0,0,0,0,0,0,0,2,0,0,1,0,0,0,0,0,0],
+			[0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0],
+			[0,1,0,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1,0,0,0,0,1,0],
+			[0,1,0,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1,0,0,0,0,1,0],
+			[0,3,1,1,0,0,1,1,1,1,1,1,1,2,2,1,1,1,1,1,1,1,0,0,1,1,3,0],
+			[0,0,0,1,0,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1,0,0,0],
+			[0,0,0,1,0,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1,0,0,0],
+			[0,1,1,1,1,1,1,0,0,1,1,1,1,0,0,1,1,1,1,0,0,1,1,1,1,1,1,0],
+			[0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0],
+			[0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0],
+			[0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+			[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+			] 
+			var pac_info = {x: 378, y: 644, coords: {row: 0, col: 0}};
+			var initial_move = true;
+			var score = 0;
+			var eaten = 0;
+
+			$('body').on('keydown',function(e){
+				e.preventDefault();
+				if (e.keyCode == 38){
+					//up
+					if (initial_move){
+						//do nothing, wall above
+					}else{
+						if (map[pac_info.coords.row-1][pac_info.coords.col] != 0){
+							$('#pacman').attr('transform', 'translate('+pac_info.x+','+(pac_info.y-28)+')');
+							$('#mouth').html('<path id="mouth_up" d="M 0 0 l 17 -10 a 20 20 0 0 1 0 20 z" stroke="black" stroke-width="3" fill="black" transform="rotate(-90)" />');
+							pac_info.y -= 28;
+							pac_info.coords.row--;
+							if (map[pac_info.coords.row][pac_info.coords.col] == 1){
+								updateScore(10);
+								eaten++;
+								var str_id = pac_info.coords.row.toString() +'x'+ pac_info.coords.col.toString();
+								$('#'+str_id).hide();
+							}
+							else if (map[pac_info.coords.row][pac_info.coords.col] == 3){
+								updateScore(100);
+								eaten++;
+								var str_id = pac_info.coords.row.toString() +'x'+ pac_info.coords.col.toString();
+								$('#'+str_id).hide();
+								turnBlue();
+								
+							}
+						}
+					}
+				}
+				if (e.keyCode == 40){
+					//down
+					if (initial_move){
+						//do nothing, wall below
+					}else{
+						if (map[pac_info.coords.row+1][pac_info.coords.col] != 0){
+							$('#pacman').attr('transform', 'translate('+pac_info.x+','+(pac_info.y+28)+')');
+							$('#mouth').html('<path id="mouth_down" d="M 0 0 l 17 -10 a 20 20 0 0 1 0 20 z" stroke="black" stroke-width="3" fill="black" transform="rotate(90)" />');
+							pac_info.y += 28;
+							pac_info.coords.row++;
+							if (map[pac_info.coords.row][pac_info.coords.col] == 1){
+								updateScore(10);
+								eaten++;
+								var str_id = pac_info.coords.row.toString() +'x'+ pac_info.coords.col.toString();
+								$('#'+str_id).hide();
+							}
+							else if (map[pac_info.coords.row][pac_info.coords.col] == 3){
+								updateScore(100);
+								eaten++;
+								var str_id = pac_info.coords.row.toString() +'x'+ pac_info.coords.col.toString();
+								$('#'+str_id).hide();
+								turnBlue();
+								
+							}
+						}
+					}
+				}
+				if (e.keyCode == 37){
+					//left
+					if (pac_info.x == 378 && initial_move){
+						$('#pacman').attr('transform', 'translate(364, 644)');
+						$('#mouth').html('<path id="mouth_left" d="M 0 0 l 17 -10 a 20 20 0 0 1 0 20 z" stroke="black" stroke-width="3" fill="black" transform="rotate(180)" />');
+						pac_info.x -= 14;
+						pac_info.coords.row = 23;
+						pac_info.coords.col = 13;
+						initial_move = false;
+					}
+					else{
+						if (pac_info.coords.row == 14 && map[pac_info.coords.row][pac_info.coords.col-1] == undefined){
+							$('#pacman').attr('transform', 'translate('+(pac_info.x+756)+','+pac_info.y+')');
+							$('#mouth').html('<path id="mouth_left" d="M 0 0 l 17 -10 a 20 20 0 0 1 0 20 z" stroke="black" stroke-width="3" fill="black" transform="rotate(180)" />');
+							pac_info.x += 756;
+							pac_info.coords.col = 27;
+						}
+						else if (map[pac_info.coords.row][pac_info.coords.col-1] != 0){
+							$('#pacman').attr('transform', 'translate('+(pac_info.x-28)+','+pac_info.y+')');
+							$('#mouth').html('<path id="mouth_left" d="M 0 0 l 17 -10 a 20 20 0 0 1 0 20 z" stroke="black" stroke-width="3" fill="black" transform="rotate(180)" />');
+							pac_info.x -= 28;
+							pac_info.coords.col--;
+							if (map[pac_info.coords.row][pac_info.coords.col] == 1){
+								updateScore(10);
+								eaten++;
+								var str_id = pac_info.coords.row.toString() +'x'+ pac_info.coords.col.toString();
+								$('#'+str_id).hide();
+							}
+							else if (map[pac_info.coords.row][pac_info.coords.col] == 3){
+								updateScore(100);
+								eaten++;
+								var str_id = pac_info.coords.row.toString() +'x'+ pac_info.coords.col.toString();
+								$('#'+str_id).hide();
+								turnBlue();
+								
+							}
+						}
+					}
+				}
+				if (e.keyCode == 39){
+					//right
+					if (pac_info.x == 378 && initial_move){
+						$('#pacman').attr('transform', 'translate(392, 644)');
+						pac_info.x += 14;
+						pac_info.coords.row = 23;
+						pac_info.coords.col = 14;
+						initial_move = false;
+					}
+					else{
+						if (pac_info.coords.row == 14 && map[pac_info.coords.row][pac_info.coords.col+1] == undefined){
+							$('#pacman').attr('transform', 'translate('+(pac_info.x-756)+','+pac_info.y+')');
+							$('#mouth').html('<path d="M 0 0 l 17 -10 a 20 20 0 0 1 0 20 z" stroke="black" stroke-width="3" fill="black" />');
+							pac_info.x -= 756;
+							pac_info.coords.col = 0;
+						}
+						else if (map[pac_info.coords.row][pac_info.coords.col+1] != 0){
+							$('#pacman').attr('transform', 'translate('+(pac_info.x+28)+','+pac_info.y+')');
+							$('#mouth').html('<path d="M 0 0 l 17 -10 a 20 20 0 0 1 0 20 z" stroke="black" stroke-width="3" fill="black" />');
+							pac_info.x += 28;
+							pac_info.coords.col++;
+							if (map[pac_info.coords.row][pac_info.coords.col] == 1){
+								updateScore(10);
+								eaten++;
+								var str_id = pac_info.coords.row.toString() +'x'+ pac_info.coords.col.toString();
+								$('#'+str_id).hide();
+							}
+							else if (map[pac_info.coords.row][pac_info.coords.col] == 3){
+								updateScore(100);
+								eaten++;
+								var str_id = pac_info.coords.row.toString() +'x'+ pac_info.coords.col.toString();
+								$('#'+str_id).hide();
+								turnBlue();
+								
+							}
+						}
+					}
+				}
+				if (eaten == 244){
+					alert("LEVEL CLEAR!");
+				}
+			});
+
+			function updateScore(num){
+				score += num;
+				map[pac_info.coords.row][pac_info.coords.col] = 2;
+				$('#score').text(score);
+				socket.emit('update_score', {
+					number: player_number, 
+					name: name, 
+					score: score
+				});
+			}
+
+			function turnBlue(){
+				$('.ghost path:first-child').attr("fill","blue");
+				$('.ghost circle:nth-child(2)').attr("fill", "blue");
+				$('.ghost circle:nth-child(2)').attr("stroke", "blue");
+
+				setTimeout(backToNormal,10000);
+
+				function backToNormal() {
+					$('#blinky path:first-child').attr("fill","red");
+					$('#blinky circle:nth-child(2)').attr("fill","red");
+					$('#blinky circle:nth-child(2)').attr("stroke","red");
+
+					$('#pinky path:first-child').attr("fill","pink");
+					$('#pinky circle:nth-child(2)').attr("fill","pink");
+					$('#pinky circle:nth-child(2)').attr("stroke","pink");
+
+					$('#inky path:first-child').attr("fill","lightblue");
+					$('#inky circle:nth-child(2)').attr("fill","lightblue");
+					$('#inky circle:nth-child(2)').attr("stroke","lightblue");
+
+					$('#clyde path:first-child').attr("fill","orange");
+					$('#clyde circle:nth-child(2)').attr("fill","orange");
+					$('#clyde circle:nth-child(2)').attr("stroke","orange");
+				}
+			}
+
+		});
+	</script>
+</head>
+<body>
+	<div class="row">
+		<div class="col-md-6 col-md-offset-1 panel panel-primary">
+			<div class="panel-heading">
+				<h3 class="panel-title text-center">PACMAN!!!</h3>
+			</div>
+			<div class="panel-body text-center">
+				<svg id="map" width="756" height="840">
+					<rect width="756" height="840" fill="black" stroke="blue" stroke-width="1" />
+					<g class="dots">
+						<% for (var i = 1; i < 30; i++){ 
+							for (var j = 1; j < 27; j++){ 
+								if ((i == 3 && j == 1) || (i == 3 && j == 26) || (i == 23 && j == 1) || (i == 23 && j == 26)) { %>
+						<circle id="<%= i.toString() +'x'+ j %>" cx="<%= j * 28 %>" cy="<%= i * 28 %>" r="12" fill="#FFCC66" />
+						<% 		}else{ %>
+						<circle id="<%= i.toString() +'x'+ j %>" cx="<%= j * 28 %>" cy="<%= i * 28 %>" r="3" fill="#FFCC66" />
+						<%   	}
+						    }
+						   } %>
+					</g>
+					<g class="outside">
+						<rect x="0" y="246" width="146" height="300" fill="black" stroke="black" />
+						<rect x="610" y="246" width="146" height="300" fill="black" stroke="black" />
+						<rect x="358" y="0" width="40" height="120" stroke="black" fill="black" />
+						<rect x="0" y="666" width="62" height="40" fill="black" stroke="black" />
+						<rect x="696" y="666" width="62" height="40" fill="black" stroke="black" />
+						<path d="M 1 364 L 140 364 L 140 252 L 1 252 L 1 1 L 358 1 Q 364,1 364,9 L 364 106 Q 378,120 392,106 L 392 9 Q 392,1 398,1 L 755 1 L 755 252 L 616 252 L 616 364 L 755 364" stroke="blue" stroke-width="5" fill="none" />
+						<path d="M 1 420 L 140 420 L 140 532 L 1 532 L 1 666 Q 1,672 8,672 L 50 672 Q 66,686 50,700 L 1 700 L 1 839 L 755 839 L 755 700 L 704 700 Q 690,686 704,672 L 755 672 L 755 532 L 616 532 L 616 420 L 755 420" stroke="blue" stroke-width="5" fill="none" />
+					</g>
+					<g class="center_bg">
+						<rect x="190" y="246" width="376" height="298" stroke="black" stroke-width="3" fill="black" />
+						<rect x="358" y="638" width="56" height="40" stroke="black" fill="black" />
+					</g>
+					<g class="3_by_2">
+						<rect x="50" y="50" width="96" height="68" stroke="black" stroke-width="3" fill="black" />
+						<rect x="56" y="56" rx="5" ry="5" width="84" height="56" stroke="blue" stroke-width="5" fill="black" />
+						<rect x="610" y="50" width="96" height="68" stroke="black" stroke-width="3" fill="black" />
+						<rect x="616" y="56" rx="5" ry="5" width="84" height="56" stroke="blue" stroke-width="5" fill="black" />
+					</g>
+					<g class="4_by_2">
+						<rect x="190" y="50" width="124" height="68" stroke="black" stroke-width="3" fill="black" />
+						<rect x="196" y="56" rx="5" ry="5" width="112" height="56" stroke="blue" stroke-width="5" fill="black" />
+						<rect x="442" y="50" width="124" height="68" stroke="black" stroke-width="3" fill="black" />
+						<rect x="448" y="56" rx="5" ry="5" width="112" height="56" stroke="blue" stroke-width="5" fill="black" />
+					</g>
+					<g class="3_by_1">
+						<rect x="50" y="162" width="96" height="40" stroke="black" stroke-width="3" fill="black" />
+						<rect x="56" y="168" rx="5" ry="5" width="84" height="28" stroke="blue" stroke-width="5" fill="black" />
+						<rect x="610" y="162" width="96" height="40" stroke="black" stroke-width="3" fill="black" />
+						<rect x="616" y="168" rx="5" ry="5" width="84" height="28" stroke="blue" stroke-width="5" fill="black" />
+					</g>
+					<g class="1_by_3">
+						<path d="M 196 426 q 14,-14 28,0 l 0 100 q -14,14 -28,0 z" stroke="blue" stroke-width="5" fill="black" />
+						<path d="M 532 426 q 14,-14 28,0 l 0 100 q -14,14 -28,0 z" stroke="blue" stroke-width="5" fill="black" />
+					</g>
+					<g class="1_by_4">
+						<rect x="190" y="580" width="124" height="40" stroke="black" fill="black" />
+						<rect x="442" y="580" width="124" height="40" stroke="black" fill="black" />
+						<path d="M 202 588 q -14,14 0,28 l 98 0 q 14,-14 0,-28 z" stroke="blue" stroke-width="5" fill="black" />
+						<path d="M 454 588 q -14,14 0,28 l 98 0 q 14,-14 0,-28 z" stroke="blue" stroke-width="5" fill="black" />
+					</g>
+					<g class="8_by_4_T">
+						<rect x="272" y="162" width="208" height="40" stroke="black" fill="black" />
+						<rect x="356" y="218" width="42" height="84" stroke="black" fill="black" />
+						<path d="M 286 168 l 184 0 q 14,14 0,28 l -72 0 q -6,0 -6,4 l 0 72 q -14,20 -28,0 l 0 -72 q 0,-4 -6,-4 l -72 0 q -14,-14 0,-28 z" stroke="blue" stroke-width="5" />
+						<rect x="272" y="498" width="208" height="40" stroke="black" fill="black" />
+						<rect x="356" y="554" width="42" height="84" stroke="black" fill="black" />
+						<path d="M 286 504 l 184 0 q 14,14 0,28 l -72 0 q -6,0 -6,4 l 0 72 q -14,20 -28,0 l 0 -72 q 0,-4 -6,-4 l -72 0 q -14,-14 0,-28 z" stroke="blue" stroke-width="5" />
+						<rect x="272" y="666" width="208" height="40" stroke="black" fill="black" />
+						<rect x="356" y="722" width="42" height="84" stroke="black" fill="black" />
+						<path d="M 286 672 l 184 0 q 14,14 0,28 l -72 0 q -6,0 -6,4 l 0 72 q -14,20 -28,0 l 0 -72 q 0,-4 -6,-4 l -72 0 q -14,-14 0,-28 z" stroke="blue" stroke-width="5" />
+					</g>
+					<g class="billy_clubs">
+						<rect x="50" y="750" width="264" height="40" stroke="black" fill="black" />
+						<rect x="190" y="666" width="40" height="90" stroke="black" fill="black" />
+						<path d="M 62 756 l 126 0 q 6,0 6,-6 l 0 -72 q 14,-14 28,0 l 0 72 q 0,6 6,6 l 72 0 q 14,14 0,28 l -238 0 q -14,-14 0,-28 z" stroke="blue" stroke-width="5" fill="black" />
+						<g transform="translate(756,0) scale(-1,1)">
+							<rect x="50" y="750" width="264" height="40" stroke="black" fill="black"/>
+							<rect x="190" y="666" width="40" height="90" stroke="black" fill="black"/>
+							<path d="M 62 756 l 126 0 q 6,0 6,-6 l 0 -72 q 14,-14 28,0 l 0 72 q 0,6 6,6 l 72 0 q 14,14 0,28 l -238 0 q -14,-14 0,-28 z" stroke="blue" stroke-width="5" fill="black"/>
+						</g>
+					</g>
+					<g class="boomerangs">
+						<rect x="50" y="580" width="100" height="40" stroke="black" fill="black" />
+						<rect x="106" y="580" width="40" height="128" stroke="black" fill="black" />
+						<path d="M 62 586 l 72 0 q 6,0 6,6 l 0 100 q -14,14 -28,0 l 0 -72 q 0,-6 -6,-6 l -44 0 q -14,-14 0,-28 z" stroke="blue" stroke-width="5" fill="black" />
+						<g transform="translate(756,0) scale(-1,1)">
+							<rect x="50" y="580" width="100" height="40" stroke="black" fill="black" />
+							<rect x="106" y="580" width="40" height="128" stroke="black" fill="black" />
+							<path d="M 62 586 l 72 0 q 6,0 6,6 l 0 100 q -14,14 -28,0 l 0 -72 q 0,-6 -6,-6 l -44 0 q -14,-14 0,-28 z" stroke="blue" stroke-width="5" fill="black" />
+						</g>
+					</g>
+					<g class="side_Ts">
+						<rect x="190" y="160" width="40" height="70" fill="black" stroke="black" />
+						<path d="M 196 174 q 14,-14 28,0 l 0 70 q 0,6 6,6 l 70 0 q 14,14 0,28 l -70 0 q -6,0 -6,6 l 0 70 q -14,14 -28,0 z" stroke="blue" stroke-width="5" />
+						<rect x="526" y="160" width="40" height="70" fill="black" stroke="black" />
+						<path d="M 196 174 q 14,-14 28,0 l 0 70 q 0,6 6,6 l 70 0 q 14,14 0,28 l -70 0 q -6,0 -6,6 l 0 70 q -14,14 -28,0 z" stroke="blue" stroke-width="5" transform="rotate(180, 378, 264)" />
+					</g>
+					<g class="corral">
+						<path d="M 278 336 l 74 0 q 6,6 0,12 l -60 0 q -6,0 -6,6 l 0 66 q 0,6 6,6 l 172 0 q 6,0 6,-6 l 0 -66 q 0,-6 -6,-6 l -60 0 q -6,-6 0,-12 l 74 0 q 3,0 3,3 l 0 100 q 0,6 -6,6 l -194 0 q -6,0 -6,-6 l 0 -100 q 0,-3 3,-3" stroke="blue" stroke-width="5" fill="black" />
+					</g>
+					<g class="gate">
+						<rect x="356" y="335" width="44" height="14" stroke="silver" stroke-width="1" fill="silver" />
+					</g>
+					<g class="baddies">
+						<g id="blinky" class="ghost" transform="translate(0,-76)">
+							<!-- red -->
+							<path d="M 378 406 l 10 -10 l 10 10 l 0 -24 l -40 0 l 0 24 l 10 -10 l 10 10 z" stroke="red" stroke-width="1" fill="red"/>
+							<circle cx="378" cy="380" r="20" stroke="red" fill="red" />
+							<circle cx="368" cy="374" r="6" stroke="white" fill="white" />
+							<circle cx="388" cy="374" r="6" stroke="white" fill="white" />
+							<circle cx="366" cy="376" r="4" stroke="white" fill="blue" />
+							<circle cx="386" cy="376" r="4" stroke="white" fill="blue" />
+						</g>
+						<g id="inky" class="ghost" transform="translate(-56,0)">
+							<!-- blue -->
+							<path d="M 378 406 l 10 -10 l 10 10 l 0 -24 l -40 0 l 0 24 l 10 -10 l 10 10 z" stroke="lightblue" stroke-width="1" fill="lightblue"/>
+							<circle cx="378" cy="380" r="20" stroke="lightblue" fill="lightblue" />
+							<circle cx="368" cy="374" r="6" stroke="white" fill="white" />
+							<circle cx="388" cy="374" r="6" stroke="white" fill="white" />
+							<circle cx="366" cy="376" r="4" stroke="white" fill="blue" />
+							<circle cx="386" cy="376" r="4" stroke="white" fill="blue" />
+						</g>
+						<g id="pinky" class="ghost" transform="translate(56,0)">
+							<!-- pink -->
+							<path d="M 378 406 l 10 -10 l 10 10 l 0 -24 l -40 0 l 0 24 l 10 -10 l 10 10 z" stroke="pink" stroke-width="1" fill="pink"/>
+							<circle cx="378" cy="380" r="20" stroke="pink" fill="pink" />
+							<circle cx="368" cy="374" r="6" stroke="white" fill="white" />
+							<circle cx="388" cy="374" r="6" stroke="white" fill="white" />
+							<circle cx="366" cy="376" r="4" stroke="white" fill="blue" />
+							<circle cx="386" cy="376" r="4" stroke="white" fill="blue" />
+						</g>
+						<g id="clyde" class="ghost">
+							<!-- orange -->
+							<path d="M 378 406 l 10 -10 l 10 10 l 0 -24 l -40 0 l 0 24 l 10 -10 l 10 10 z" stroke="orange" stroke-width="1" fill="orange"/>
+							<circle cx="378" cy="380" r="20" stroke="orange" fill="orange" />
+							<circle cx="368" cy="374" r="6" stroke="white" fill="white" />
+							<circle cx="388" cy="374" r="6" stroke="white" fill="white" />
+							<circle cx="366" cy="376" r="4" stroke="white" fill="blue" />
+							<circle cx="386" cy="376" r="4" stroke="white" fill="blue" />
+						</g>
+					</g>
+					<g id="pacman" transform="translate(378,644)">
+						<circle cx="0" cy="0" r="20" stroke="yellow" fill="yellow" />
+						<g id="mouth">
+							<path d="M 0 0 l 17 -10 a 20 20 0 0 1 0 20 z" stroke="black" stroke-width="3" fill="black" />
+						</g>
+					</g>
+				</svg>
+			</div>
+		</div>
+		<div id="battle" class="col-md-4 well well-lg">
+			<div class="row">
+				<div class="col-md-10 col-md-offset-1">
+					<div class="panel panel-success">
+						<div class="text-center panel-heading">YOUR SCORE: <span id="score"></span></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</body>
+</html>
